@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>한국 쓰레기 분리배출 가이드</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root { --main-green: #27ae60; --food-yellow: #f1c40f; --recycle-blue: #3498db; --gen-gray: #7f8c8d; --large-red: #e74c3c; }
+        body { font-family: 'Malgun Gothic', 'Noto Sans SC', 'Apple SD Gothic Neo', sans-serif; background-color: #f4f7f6; padding-bottom: 50px; }
+        .lang-nav { background: #fff; padding: 12px 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 1000; }
+        .lang-nav .btn { border-radius: 20px; font-weight: bold; margin: 2px; border-width: 2px; transition: 0.3s; }
+        .lang-nav .btn.active { background-color: var(--main-green) !important; color: white !important; }
+        .header-section { background: linear-gradient(135deg, #1abc9c, #27ae60); color: white; padding: 60px 0 70px; border-bottom-left-radius: 40px; border-bottom-right-radius: 40px; }
+        .search-container { margin-top: -35px; max-width: 650px; margin-left: auto; margin-right: auto; }
+        .input-group { background: white; border-radius: 50px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15); border: none; }
+        .search-input { border: none; padding: 18px 25px; font-size: 1.1rem; box-shadow: none !important; }
+        .search-btn { background: #1abc9c !important; color: white !important; border: none !important; padding: 0 35px !important; font-weight: bold !important; }
+        .card { border: none; border-radius: 24px; transition: 0.3s; height: 100%; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+        .badge-type { padding: 5px 15px; border-radius: 50px; font-size: 0.85rem; font-weight: bold; margin-bottom: 12px; display: inline-block; }
+        .why-box { background: #f8fbf9; padding: 20px; border-radius: 18px; font-size: 0.95rem; border-left: 5px solid var(--main-green); margin-top: 15px; text-align: left; line-height: 1.7; color: #333; }
+        .learn-row { font-size: 0.85rem; color: #666; margin-top: 10px; border-top: 1px dashed #ddd; padding-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <nav class="lang-nav text-center">
+        <div class="container position-relative">
+            <button class="btn btn-outline-success btn-sm active" id="btn-cn" onclick="changeLang('cn')">中文</button>
+            <button class="btn btn-outline-success btn-sm" id="btn-kr" onclick="changeLang('kr')">한국어</button>
+            <button class="btn btn-outline-success btn-sm" id="btn-en" onclick="changeLang('en')">English</button>
+            <button class="btn btn-dark btn-sm float-end" type="button" data-bs-toggle="offcanvas" data-bs-target="#historySidebar">📜 <span id="ui-hist-btn">히스토리</span></button>
+        </div>
+    </nav>
+
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="historySidebar">
+        <div class="offcanvas-header border-bottom">
+            <h5 class="offcanvas-title fw-bold" id="ui-hist-title">조회 히스토리</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+        </div>
+        <div class="offcanvas-body" id="historyList"></div>
+    </div>
+
+    <header class="header-section text-center">
+        <div class="container">
+            <h1 id="ui-title">한국 쓰레기 분리수거 가이드</h1>
+            <p id="ui-subtitle" class="opacity-75">외국인을 위한 지능형 분리배출 의사결정 지원 시스템</p>
+        </div>
+    </header>
+
+    <main class="container text-center mt-3">
+        <div class="search-container mb-5">
+            <div class="input-group shadow-lg">
+                <input type="text" id="searchInput" class="form-control search-input" placeholder="검색어를 입력하세요..." onkeydown="if(event.keyCode==13) handleSearch()">
+                <button class="btn search-btn" onclick="handleSearch()" id="ui-search-btn">🔍 검색</button>
+            </div>
+        </div>
+        <div id="loading" style="display:none;" class="my-4 text-success fw-bold">
+            <div class="spinner-border spinner-border-sm"></div> <span id="ui-loading-text">의사결정 알고리즘 분석 중...</span>
+        </div>
+        <div id="resultArea" class="row justify-content-center"></div>
+    </main>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // 🚨 CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyA1EvmWfaFtdMVxePTlXl8qgF5Ka40iPPU",
+            authDomain: "tststs-a9e61.firebaseapp.com",
+            projectId: "tststs-a9e61"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const uiText = {
+            cn: { title: "韩国垃圾分类助手", subtitle: "支持中/韩/英对照学习的智能决策系统", search: "🔍 搜索", placeholder: "输入物品名称 (如: 香蕉皮, 显示器, 炸鸡)...", loading: "正在进行多语言算法分析...", hist_btn: "历史记录", hist_title: "云端查询历史", why: "分类依据", cat_food: "食物垃圾", cat_general: "一般垃圾", cat_recycle: "再利用", cat_large: "大型废弃物", learn: "对照学习" },
+            kr: { title: "한국 쓰레기 분리수거 가이드", subtitle: "외국인을 위한 지능형 의사결정 및 다국어 대조 학습 시스템", search: "🔍 검색", placeholder: "물건 이름을 입력하세요 (예: 바나나 껍질, 모니터, 치킨)...", loading: "의사결정 알고리즘 연산 중...", hist_btn: "히스토리", hist_title: "클라우드 조회 기록", why: "배출 근거", cat_food: "음식물 쓰레기", cat_general: "일반 쓰레기", cat_recycle: "재활용", cat_large: "대형 폐기물", learn: "대조 학습" },
+            en: { title: "Korea Waste Guide AI", subtitle: "Intelligent Decision Support & Vocabulary Learning", search: "🔍 Search", placeholder: "Enter item name (e.g. Banana peel, Monitor, Chicken)...", loading: "Analyzing data report...", hist_btn: "History", hist_title: "Cloud History", why: "Reasoning", cat_food: "Food Waste", cat_general: "General Waste", cat_recycle: "Recycle", cat_large: "Large Waste", learn: "Vocabulary" }
+        };
+
+        // 🚀 核心百科数据库：涵盖世间万物
+        const UniverseLibrary = [
+            // FOOD WASTE (有机、可粉碎、动物能吃)
+            { keys: ["香蕉皮", "바나나 껍질", "banana peel", "fruit peel", "果皮", "苹果皮", "귤 껍질"], type: "Food", names: {cn:"香蕉皮/软果皮", kr:"바나나/부드러운 과일 껍질", en:"Banana/Soft Fruit Peel"}, reasons: {cn:"柔软的果皮可加工成饲料。注意：坚硬的果核是一般垃圾。", kr:"부드러운 과일 껍질은 사료로 재활용 가능합니다. 딱딱한 씨앗은 일반쓰레기입니다.", en:"Soft peels are recyclable as animal feed. Hard seeds go to General Waste."} },
+            { keys: ["肉", "고기", "meat", "炸鸡", "치킨", "chicken", "닭다리", "鸡腿", "剩菜", "剩饭"], type: "Food", names: {cn:"肉类/炸鸡/剩饭", kr:"고기/치킨/남은 음식물", en:"Meat/Fried Chicken/Leftovers"}, reasons: {cn:"纯肉和剩菜是食物垃圾。提示：必须剔除坚硬的骨头。", kr:"순수 살코기와 음식물은 사료화가 가능합니다. 딱딱한 뼈는 반드시 분리하세요.", en:"Meat and leftovers are Food Waste. Remove hard bones before disposal."} },
+            { keys: ["鸡蛋", "계란", "egg", "달걀", "蛋黄", "蛋白"], type: "Food", names: {cn:"鸡蛋(内容物)", kr:"달걀(내용물)", en:"Egg (Contents)"}, reasons: {cn:"剥壳后的蛋液属于食物垃圾。蛋壳本身是一般垃圾。", kr:"껍질을 제외한 알맹이는 음식물입니다. 껍데기는 일반쓰레기입니다.", en:"Egg contents are Food Waste. Dispose of shells in General Waste."} },
+            
+            // GENERAL WASTE (坚硬、有毒、不可饲料化)
+            { keys: ["蛋壳", "계란 껍질", "eggshell", "egg shell", "壳", "껍데기", "조개", "贝壳"], type: "General", names: {cn:"蛋壳/贝壳/硬壳", kr:"달걀 껍질/조개 껍데기", en:"Egg shells / Shells"}, reasons: {cn:"坚硬的石灰质外壳动物无法消化，是一般垃圾。", kr:"딱딱하여 가축 사료로 쓸 수 없는 일반 쓰레기입니다.", en:"Hard shells are non-edible. Disposal via General Waste bag."} },
+            { keys: ["骨头", "뼈", "bone", "鸡骨头", "猪骨", "牛骨"], type: "General", names: {cn:"动物骨头", kr:"동물 뼈", en:"Animal Bones"}, reasons: {cn:"坚硬骨头会损坏加工机械，属于一般垃圾。", kr:"가축 사료 가공 공정에서 기계를 손상시키므로 일반 쓰레기입니다.", en:"Hard bones are general waste because they damage processing machines."} },
+            { keys: ["洋葱皮", "大蒜皮", "양파 껍질", "마늘 껍질", "onion skin", "玉米芯", "옥수수대"], type: "General", names: {cn:"洋葱皮/大蒜皮/玉米芯", kr:"양파/마늘 껍질, 옥수수 대", en:"Onion/Garlic Skins, Corn Cobs"}, reasons: {cn:"纤维过硬且无营养，不属于食物垃圾。", kr:"질긴 껍질이나 옥수수 대는 사료 가치가 없어 일반 쓰레기입니다.", en:"Fibrous skins and cobs have no nutritional value and are General Waste."} },
+            { keys: ["纸巾", "휴지", "tissue", "湿纸巾", "物티슈", "烟头", "담배꽁초", "尿布"], type: "General", names: {cn:"生活杂物(纸巾/烟头)", kr:"생활 잡동사니(휴지/담배꽁초)", en:"Daily Waste (Tissue/Cigarette)"}, reasons: {cn:"受污染的纸张和不可回收杂物放入一般垃圾袋。", kr:"오염된 종이와 재활용 불가 물품은 일반 종량제 봉투에 배출하세요.", en:"Contaminated paper and non-recyclables go to General Waste."} },
+            
+            // LARGE WASTE / APPLIANCE (需申报)
+            { keys: ["显示器", "모니터", "monitor", "电视", "TV", "电脑", "computer", "冰箱", "냉장고"], type: "Large", names: {cn:"显示器/电子家电", kr:"모니터/폐가전", en:"Monitor / Appliance"}, reasons: {cn:"属于废旧家电。大型家电可预约免费回收(1599-0903)，小型可申领大件排放。", kr:"폐가전제품입니다. 대형가전은 1599-0903으로 무상방문수거 신청 가능합니다.", en:"Electronic waste. Call 1599-0903 for free collection of large appliances."} },
+            { keys: ["沙发", "소파", "sofa", "桌子", "책상", "desk", "table", "椅子", "의자", "床", "침대", "柜子"], type: "Large", names: {cn:"沙发/家具类", kr: "소파/가구류", en:"Sofa / Furniture"}, reasons: {cn:"属于大型废弃物。需联系社区中心购买贴纸并申报后排放。", kr:"대형폐기물입니다. 지자체에 신고 후 스티커를 부착하여 배출하세요.", en:"Large waste. Reporting and sticker purchase from Dong-office required."} },
+            { keys: ["电线", "전선", "cable", "wire", "数据线"], type: "General", names: {cn:"电线/线缆", kr: "전선/케이블", en:"Cables / Wires"}, reasons: {cn:"少量电线放入一般垃圾袋。大量可作为废金属回收。", kr:"소량의 전선은 일반 종량제 봉투에, 대량은 고물상에 배출하세요.", en:"Small amounts go to General Waste. Large amounts can be recycled as scrap metal."} },
+
+            // RECYCLE
+            { keys: ["塑料瓶", "페트병", "plastic bottle", "塑料", "플라스틱"], type: "Recycle", names: {cn:"塑料瓶/容器", kr:"페트병/플라스틱류", en:"Plastic Bottle / Container"}, reasons: {cn:"请排空内容物，清洗并撕掉标签后排放。", kr:"내용물을 비우고 라벨을 제거한 뒤 분리배출하세요.", en:"Empty, rinse, and remove labels before recycling."} },
+            { keys: ["塑料袋", "비닐", "vinyl", "塑料袋"], type: "Recycle", names: {cn:"塑料袋/薄膜", kr:"비닐봉투/비닐류", en:"Plastic Bag / Vinyl"}, reasons: {cn:"干净的塑料袋属于回收(Vinyl)。若有油污请放入一般垃圾。", kr:"깨끗한 비닐은 재활용입니다. 오염된 경우 일반 쓰레기입니다.", en:"Clean vinyl is recyclable. Stained ones go to General Waste."} },
+            { keys: ["纸箱", "택배 박스", "box", "종이"], type: "Recycle", names: {cn:"纸箱/快递盒", kr:"택배 박스/종이류", en:"Paper Box / Cardboard"}, reasons: {cn:"请撕掉胶带和快递单，压扁后排放。", kr:"테이프와 송장을 제거하고 압착하여 배출하세요.", en:"Remove tape and shipping labels, flatten before recycling."} }
+        ];
+
+        let lang = 'cn';
+        let currentResult = null;
+
+        function changeLang(l) {
+            lang = l;
+            document.querySelectorAll('.lang-nav .btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('btn-' + l).classList.add('active');
+            const t = uiText[l];
+            document.getElementById('ui-title').innerText = t.title;
+            document.getElementById('ui-subtitle').innerText = t.subtitle;
+            document.getElementById('ui-search-btn').innerText = t.search;
+            document.getElementById('searchInput').placeholder = t.placeholder;
+            document.getElementById('ui-loading-text').innerText = t.loading;
+            document.getElementById('ui-hist-btn').innerText = t.hist_btn;
+            document.getElementById('ui-hist-title').innerText = t.hist_title;
+            if (currentResult) renderCard(currentResult);
+            fetchHistory();
+        }
+
+        function handleSearch() {
+            const input = document.getElementById('searchInput').value.trim().toLowerCase();
+            if(!input) return;
+            document.getElementById('resultArea').innerHTML = "";
+            document.getElementById('loading').style.display = "block";
+
+            // 🚀 核心搜索逻辑：跨语言匹配百科库
+            const match = UniverseLibrary.find(item => 
+                item.keys.some(k => input.includes(k.toLowerCase()))
+            );
+
+            setTimeout(() => {
+                if (match) {
+                    currentResult = match;
+                    renderCard(match);
+                    saveToCloud(match);
+                } else {
+                    // 模糊兜底判断
+                    let type = "General";
+                    if (input.match(/肉|고기|meat|饭|菜|皮/)) type = "Food";
+                    else if (input.match(/沙发|桌|椅|显示器|monitor|desk|가구/)) type = "Large";
+                    else if (input.match(/瓶|罐|纸|塑料|vinyl/)) type = "Recycle";
+                    
+                    const fallback = { 
+                        type, 
+                        names: {cn: input, kr: input, en: input}, 
+                        reasons: {
+                            cn: "基于韩国分里排出准则的智能决策。", 
+                            kr: "대한민국 분리배출 원칙에 따른 지능형 의사결정입니다.", 
+                            en: "Intelligent decision based on South Korea guidelines."
+                        } 
+                    };
+                    currentResult = fallback;
+                    renderCard(fallback);
+                    saveToCloud(fallback);
+                }
+            }, 500);
+        }
+
+        function renderCard(res) {
+            document.getElementById('loading').style.display = "none";
+            const colors = { Food: '#f1c40f', Recycle: '#3498db', Large: '#e74c3c', General: '#7f8c8d' };
+            const badgeClass = { Food: 'warning text-dark', Recycle: 'primary', Large: 'danger', General: 'secondary' };
+            const color = colors[res.type] || '#7f8c8d';
+
+            const name = res.names[lang];
+            const reason = res.reasons[lang];
+
+            let learns = [];
+            if (lang !== 'cn') learns.push(`中: ${res.names.cn}`);
+            if (lang !== 'kr') learns.push(`韩: ${res.names.kr}`);
+            if (lang !== 'en') learns.push(`英: ${res.names.en}`);
+
+            document.getElementById('resultArea').innerHTML = `
+                <div class="col-12 col-md-8 mx-auto text-start">
+                    <div class="card shadow-lg" style="border-left: 10px solid ${color}">
+                        <div class="card-body p-4">
+                            <span class="badge bg-${badgeClass[res.type]} mb-2">${uiText[lang]['cat_'+res.type.toLowerCase()]}</span>
+                            <span class="ai-tag">지능형 분석 시스템</span>
+                            <h2 class="fw-bold my-2 text-dark">${name}</h2>
+                            <div class="learn-row"><strong>${uiText[lang].learn}:</strong> ${learns.join(' | ')}</div>
+                            <div class="why-box" style="border-left-color: ${color}">
+                                <strong>${uiText[lang].why}:</strong> ${reason}
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        async function saveToCloud(res) {
+            try { await db.collection("records").add({ ...res, time: new Date() }); fetchHistory(); } catch (e) {}
+        }
+
+        async function fetchHistory() {
+            const list = document.getElementById('historyList');
+            try {
+                const snap = await db.collection("records").orderBy("time", "desc").limit(6).get();
+                if(snap.empty) { list.innerHTML = "<p class='text-center mt-5 small text-muted'>조회 기록 없음</p>"; return; }
+                list.innerHTML = snap.docs.map(doc => {
+                    const d = doc.data();
+                    return `<div class="history-item shadow-sm" onclick='currentResult=${JSON.stringify(d)};renderCard(currentResult);'>
+                        <strong>${d.names[lang] || d.names.cn}</strong> <small class="badge bg-light text-dark border float-end">${d.type}</small>
+                    </div>`;
+                }).join('');
+            } catch (e) {}
+        }
+
+        changeLang('cn');
+    </script>
+</body>
+</html>
